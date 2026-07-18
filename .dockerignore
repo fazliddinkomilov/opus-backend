@@ -1,0 +1,12 @@
+.git/
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.env
+.env.*
+!.env.example
+media/
+staticfiles/
+db.sqlite3
+db.sqlite3-journal

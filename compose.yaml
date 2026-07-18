@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mastergo}
+      POSTGRES_USER: ${POSTGRES_USER:-mastergo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mastergo}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mastergo} -d ${POSTGRES_DB:-mastergo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py seed_categories &&
+             uvicorn config.asgi:application --host 0.0.0.0 --port 8000"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-mastergo-secret}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-1}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,10.0.2.2,host.docker.internal,backend}
+      DJANGO_CORS_ALLOWED_ORIGINS: ${DJANGO_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      POSTGRES_DB: ${POSTGRES_DB:-mastergo}
+      POSTGRES_USER: ${POSTGRES_USER:-mastergo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mastergo}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      MASTERGO_USE_SQLITE: 0
+      MASTERGO_USE_INMEMORY_CHANNELS: 0
+      MASTERGO_MOCK_OTP: ${MASTERGO_MOCK_OTP:-1}
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend_media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=2)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres_data:
+  backend_media:
